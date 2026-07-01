@@ -8,7 +8,7 @@ from numbers import Integral, Real
 
 import numpy as np
 import scipy.linalg
-from scipy import linalg
+from scipy import linalg, sparse
 
 from sklearn.base import (
     BaseEstimator,
@@ -119,11 +119,17 @@ def _class_means(X, y):
         for i in range(classes.shape[0]):
             means[i, :] = xp.mean(X[y == i], axis=0)
     else:
-        # TODO: Explore the choice of using bincount + add.at as it seems sub optimal
-        # from a performance-wise
-        cnt = np.bincount(y)
-        np.add.at(means, y, X)
-        means /= cnt[:, None]
+        if X.shape[1] < 8 or X.shape[0] * X.shape[1] <= 32768:
+            cnt = np.bincount(y)
+            np.add.at(means, y, X)
+            means /= cnt[:, None]
+        else:
+            indicator = sparse.csr_matrix(
+                (np.ones(y.shape[0], dtype=X.dtype), (np.arange(y.shape[0]), y)),
+                shape=(y.shape[0], classes.shape[0]),
+            )
+            means = indicator.T @ X
+            means /= np.asarray(indicator.sum(axis=0)).T
     return means
 
 
